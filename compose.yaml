@@ -1,0 +1,136 @@
+# begin-snippet: FullCompose
+services:
+
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    restart: unless-stopped
+    ports:
+      - "11434:8080"
+    volumes:
+      - ./models:/models
+    command:
+      - "--models-dir"
+      - "/models"
+      - "--port"
+      - "8080"
+      - "--host"
+      - "0.0.0.0"
+
+  mentat:
+    image: gendalf90/mentat:latest
+    restart: unless-stopped
+    depends_on:
+      - thinking-tools-augmentor
+    environment:
+      OpenAIUrl: "http://thinking-tools-augmentor:8080"
+      OpenAIModel: "Qwen3.5-122B-A10B-GGUF"
+      MailImapHost: "imap.mail.ru"
+      MailSmtpHost: "smtp.mail.ru"
+      MailUsers: "user-to-be-answered@mail.com"
+      MailLogin: "user-to-login@mail.ru"
+      MailPassword: "<mail server app password>"
+
+  programmer-buddy-mcp:
+    image: gendalf90/buddy:latest
+    restart: unless-stopped
+    environment:
+      OpenAIUrl: "http://common-tools-augmentor:8080"
+      OpenAIModel: "Qwen3-Coder-Next-GGUF"
+      OpenAIPrompt: "You are a good programmer."
+      ToolName: "ask_programmer"
+      ToolDescription: "Call special programming LLM. Use this when you need to solve any programming problem. The model can use common files in workspace and search or open pages from internet."
+      PromptDescription: "The free text for request."
+
+  office-buddy-mcp:
+    image: gendalf90/buddy:latest
+    restart: unless-stopped
+    environment:
+      OpenAIUrl: "http://common-tools-augmentor:8080"
+      OpenAIModel: "Qwen3.8-27B-GGUF"
+      OpenAIPrompt: "You are an office worker who can do various routine extensive work."
+      ToolName: "ask_office"
+      ToolDescription: "Call simple LLM. Use this when you need do various routine extensive work. The model can use common files in workspace and search or open pages from internet."
+      PromptDescription: "The free text for request."
+
+  files-mcp:
+    image: supercorp/supergateway:latest
+    restart: unless-stopped
+    volumes:
+      - ./workspace:/workspace
+    command:
+      - "--stdio"
+      - "npx -y @modelcontextprotocol/server-filesystem /workspace"
+      - "--outputTransport"
+      - "sse"
+      - "--port"
+      - "8080"
+
+  thinking-mcp:
+    image: supercorp/supergateway:latest
+    restart: unless-stopped
+    command:
+      - "--stdio"
+      - "npx -y @modelcontextprotocol/server-sequential-thinking"
+      - "--outputTransport"
+      - "sse"
+      - "--port"
+      - "8080"
+
+  fetcher-mcp:
+    image: ghcr.io/jae-jae/fetcher-mcp:latest
+    restart: unless-stopped
+
+  search-mcp:
+    image: supercorp/supergateway:latest
+    restart: unless-stopped
+    environment:
+      - SEARXNG_INSTANCES=http://searxng:8080
+    depends_on:
+      - searxng
+    command:
+      - "--stdio"
+      - "npx -y @kevinwatt/mcp-server-searxng"
+      - "--outputTransport"
+      - "sse"
+      - "--port"
+      - "8080"
+
+  thinking-tools-augmentor:
+    image: gendalf90/augmentor:latest
+    restart: unless-stopped
+    ports:
+      - "8822:8080"
+    depends_on:
+      - thinking-mcp
+      - programmer-buddy-mcp
+      - office-buddy-mcp
+      - common-tools-augmentor
+    environment:
+      - Endpoint=http://common-tools-augmentor:8080
+      - Mcp__Thinking__Endpoint=http://thinking-mcp:8080/sse
+      - Mcp__Programmer__Endpoint=http://programmer-buddy-mcp:8080
+      - Mcp__Office__Endpoint=http://office-buddy-mcp:8080
+
+  common-tools-augmentor:
+    image: gendalf90/augmentor:latest
+    restart: unless-stopped
+    ports:
+      - "8811:8080"
+    depends_on:
+      - files-mcp
+      - fetcher-mcp
+      - search-mcp
+      - llama
+    environment:
+      - Endpoint=http://llama:8080
+      - Mcp__Files__Endpoint=http://files-mcp:8080/sse
+      - Mcp__Fetcher__Endpoint=http://fetcher-mcp:3000/mcp
+      - Mcp__Search__Endpoint=http://search-mcp:8080/sse
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng
+# end-snippet

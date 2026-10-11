@@ -1,0 +1,19 @@
+use_default_settings:
+  engines:
+    keep_only:
+      - bing
+      - duckduckgo
+      - wikipedia
+
+server:
+  bind_address: "0.0.0.0"
+  secret_key: "<some generated key>"
+  port: 8080
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+
+server.limiter: false
